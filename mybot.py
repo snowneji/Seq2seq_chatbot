@@ -12,9 +12,12 @@ from keras.models import load_model
 from predict import decode_sequence
 import string
 
+file = open('auth.txt','r') 
+token = file.read() 
+file.close()
 
 # instantiate Slack client
-slack_client = SlackClient("xoxb-310372850160-K7OiUCynalWLZfIhfAXetWvP")
+slack_client = SlackClient(token)
 # starterbot's user ID in Slack: value is assigned after the bot starts up
 starterbot_id = None
 # constants
@@ -79,36 +82,44 @@ def handle_command(command, channel):
     command = clean_command(command)
     response = None
     # This is where you start to implement more commands!
+    global counter;
 
-
-
+    
     # Seq2seq prediction
-    query = tokenizer.texts_to_sequences([command])
-    query2 = np.zeros(
-        (1, max_len, max_words),
-        dtype='float32')
-    for t, char in enumerate(query[0]):
-        query2[:, t, char] = 1. 
-    response = decode_sequence(
-        input_seq = query2,
-        encoder_model = encoder_model,
-        decoder_model = decoder_model,
-        max_words = max_words,
-        max_len = max_len,
-        reverse_input_char_index = reverse_input_char_index
-        )
+    try:
+        query = tokenizer.texts_to_sequences([command])
+        query2 = np.zeros(
+            (1, max_len, max_words),
+            dtype='float32')
+        for t, char in enumerate(query[0]):
+            query2[:, t, char] = 1. 
+        response = decode_sequence(
+            input_seq = query2,
+            encoder_model = encoder_model,
+            decoder_model = decoder_model,
+            max_words = max_words,
+            max_len = max_len,
+            reverse_input_char_index = reverse_input_char_index
+            )
+        chat_history.append(command)
+        chat_history.append(response)
+
+
+    except:
+        response = "I couldn't understand it at this moment, keep talking to me so I can learn from you!"
 
 
 
 
-    command_memory.append(command)
-    command_memory.append(response)
+    if counter%5==0:
+        file = open('chat_history.txt','w')
+        for chat in chat_history:
+            file.write(chat+'\n')
+        file.close()
 
-
-    if command == 'terminateifanbot':
-        pickle.dump( command_memory, open( "QA_{}.p".format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')), "wb" ) )
         print('saved!')
-
+        response = response +'\n'+"Oh..Thank you for staying and teach me to talk like human~btw"
+        
 
 
 
@@ -126,7 +137,7 @@ def handle_command(command, channel):
     # slack_client.api_call(
     #     "chat.postMessage",
     #     channel=channel,
-    #     text= "\n"+"\n"+"(Your input history:"+"\n"+ "\n".join(command_memory)+")"
+    #     text= "\n"+"\n"+"(Your input history:"+"\n"+ "\n".join(chat_history)+")"
     # )
 
 
@@ -139,11 +150,17 @@ if __name__ == "__main__":
         # Read bot's user ID by calling Web API method `auth.test`
         starterbot_id = slack_client.api_call("auth.test")["user_id"]
 
-        command_memory = []
+        chat_history = []
+        counter = 0
         while True:
+
             command, channel = parse_bot_commands(slack_client.rtm_read())
             if command:
+                counter += 1
                 handle_command(command, channel)
+                
+
             time.sleep(RTM_READ_DELAY)
+
     else:
         print("Connection failed. Exception traceback printed above.")
